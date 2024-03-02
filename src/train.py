@@ -15,7 +15,7 @@ from collections import deque
 import random
 
 # from matplotlib import pyplot as plt
-# from copy import deepcopy
+from copy import deepcopy
 
 # from datetime import datetime
 
