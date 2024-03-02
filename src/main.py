@@ -5,6 +5,7 @@ import torch
 
 from evaluate import evaluate_HIV, evaluate_HIV_population
 from train import ProjectAgent  # Replace DummyAgent with your agent implementation
+import os
 
 
 def seed_everything(seed: int = 42):
@@ -20,6 +21,7 @@ def seed_everything(seed: int = 42):
 
 if __name__ == "__main__":
     seed_everything(seed=42)
+    print(os.getcwd())
     # Initialization of the agent. Replace DummyAgent with your custom agent implementation.
     config = {'nb_actions': 4,
             'learning_rate': 0.001,
@@ -40,7 +42,7 @@ if __name__ == "__main__":
             'memory_length':5}
 
     agent = ProjectAgent(config)
-    agent.load('qnetwork.pt')
+    agent.load('./src/qnetwork.pt')
     # Keep the following lines to evaluate your agent unchanged.
     score_agent: float = evaluate_HIV(agent=agent, nb_episode=1)
     score_agent_dr: float = evaluate_HIV_population(agent=agent, nb_episode=15)
