@@ -17,6 +17,8 @@ import random
 # from matplotlib import pyplot as plt
 from copy import deepcopy
 
+import os
+
 # from datetime import datetime
 
 
@@ -46,9 +48,29 @@ class ReplayBuffer:
         return list(map(lambda x:torch.Tensor(np.array(x)).to(self.device), list(zip(*batch))))
     def __len__(self):
         return len(self.data)
+    
 
 class ProjectAgent:
-    def __init__(self, config):
+    def __init__(self):
+        config = {'nb_actions': 4,
+                'learning_rate': 0.001,
+                'gamma':0.99,
+                'buffer_size': 1000000,
+                'epsilon_min': 0.1,
+                'epsilon_max': 1.,
+                'epsilon_decay_period': 40000,
+                'epsilon_delay_decay': 1200,
+                'batch_size': 1024,
+                'gradient_steps': 5,
+                'update_target_strategy': 'ema',#'replace', # or 'ema'
+                'update_target_freq': 200,
+                'update_target_tau': 0.001,
+                'criterion': torch.nn.SmoothL1Loss(),
+                'nb_neurons': 512,
+                'device': torch.device("cuda" if torch.cuda.is_available() else "cpu"),
+                'memory_length':5,
+                'model_path': './20715817695.pt'}
+    
         self.device = config['device']
         self.nb_actions = config['nb_actions']
         self.gamma = config['gamma'] if 'gamma' in config.keys() else 0.95
@@ -79,11 +101,26 @@ class ProjectAgent:
         self.update_target_strategy = config['update_target_strategy'] if 'update_target_strategy' in config.keys() else 'replace'
         self.update_target_freq = config['update_target_freq'] if 'update_target_freq' in config.keys() else 20
         self.update_target_tau = config['update_target_tau'] if 'update_target_tau' in config.keys() else 0.005
+        self.voting = config['voting'] if 'voting' in config.keys() else False
+        if self.voting:
+            self.voting_models_dir = config['voting_models_dir']
+            self.voting_models = [torch.load(f"{self.voting_models_dir}\\{model}") for model in os.listdir(self.voting_models_dir)]
+        else:
+            self.model_path = config['model_path']
     
     def greedy_action(self, state):
         with torch.no_grad():
             Q = self.model(torch.Tensor(state).unsqueeze(0).to(self.device))
         return torch.argmax(Q).item()
+    
+    def greedy_action_voting(self, state):
+        votes = torch.zeros(self.nb_actions)
+        for model_dict in self.voting_models:
+            self.model.load_state_dict(model_dict)
+            with torch.no_grad():
+                Q = self.model(torch.Tensor(state).unsqueeze(0).to(self.device))
+            votes[torch.argmax(Q)] += 1
+        return torch.argmax(votes).item()
     
     def gradient_step(self):
         if len(self.memory) > self.batch_size:
@@ -101,15 +138,21 @@ class ProjectAgent:
         torch.save(self.model.to('cpu').state_dict(), path)
         self.model.to(self.device)
     
-    def load(self, path):
-        self.model.load_state_dict(torch.load(path, map_location=self.device))
-        self.target_model.load_state_dict(self.model.state_dict())
-        
+    def load(self, path=''):
         # When we load the model we just use it for evaluation so we make sure the actions are fuly driven by the model
         self.epsilon_max = 0
         self.epsilon_min = 0
+        if path =='':   
+            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
+            self.target_model.load_state_dict(self.model.state_dict())
+        else:
+            self.model.load_state_dict(torch.load(path, map_location=self.device))
+            self.target_model.load_state_dict(self.model.state_dict())
+            
 
     def act(self, observation, use_random=False):
+        if self.voting:
+            return self.greedy_action_voting(observation)
         if use_random:
             action = env.action_space.sample()
         else:
@@ -162,7 +205,7 @@ class ProjectAgent:
                 state, _ = env.reset()
 
                 # Save the model if it is the best so far
-                if len(episode_return) == 0 or episode_cum_reward >= max(episode_return):
+                if episode_cum_reward > 2e10:
                     print("New best model saved")
                     now = datetime.now().strftime("%Y%m%d-%H%M%S")
                     self.save(f"best_model_{now}.pt")
