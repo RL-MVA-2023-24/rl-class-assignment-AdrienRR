@@ -69,7 +69,7 @@ class ProjectAgent:
                 'nb_neurons': 512,
                 'device': torch.device("cuda" if torch.cuda.is_available() else "cpu"),
                 'memory_length':5,
-                'model_path': './model.pt'}
+                'model_path': './src/model.pt'}
     
         self.device = config['device']
         self.nb_actions = config['nb_actions']
